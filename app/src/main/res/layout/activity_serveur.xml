@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/titleTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="La Maison Bluetooth"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_centerHorizontal="true"/>
+
+    <TextView
+        android:id="@+id/descriptionTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Voulez-vous activer le serveur (hub) ou le client (télécommande utilisateur)?"
+        android:layout_below="@id/titleTextView"
+        android:layout_marginTop="20dp"
+        android:layout_centerHorizontal="true"/>
+
+    <Button
+        android:id="@+id/statusButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="CLIENT EN ATTENTE"
+        android:layout_below="@id/descriptionTextView"
+        android:layout_marginTop="20dp"
+        android:enabled="false" />
+
+    <TextView
+        android:id="@+id/connectionStatusTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="*Attente de connection au serveur*"
+        android:layout_below="@id/statusButton"
+        android:layout_marginTop="20dp"
+        android:layout_centerHorizontal="true"/>
+
+</RelativeLayout>
