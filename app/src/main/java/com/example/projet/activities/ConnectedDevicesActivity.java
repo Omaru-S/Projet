@@ -1,5 +1,6 @@
 package com.example.projet.activities;
 
+import android.bluetooth.BluetoothSocket;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
@@ -8,23 +9,22 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.JsonArrayRequest;
-import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.projet.R;
-import com.android.volley.Request;
+import com.example.projet.bluetooth.BluetoothConnectionManager;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.util.HashMap;
-import java.util.Map;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ConnectedDevicesActivity extends AppCompatActivity {
 
@@ -32,21 +32,24 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
     private RequestQueue requestQueue;
     private Handler handler = new Handler();
     private Runnable updateDevicesRunnable;
-    private final String houseId = "35";
-    // The URL endpoint for POST requests - replace with actual URL endpoint
-    private final String postUrl = "https://www.bde.enseeiht.fr/~bailleq/smartHouse/api/v1/devices/35";
+    private List<Device> devices = new ArrayList<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_connected_devices);
         devicesLayout = findViewById(R.id.devicesLayout);
         requestQueue = Volley.newRequestQueue(this);
+
+        // Start Bluetooth data receiver
+        startBluetoothReceiverThread();
+
         // Define the Runnable task for fetching and updating devices
         updateDevicesRunnable = new Runnable() {
             @Override
             public void run() {
                 Log.d("ConnectedDevicesActivity", "Fetching and updating device information");
-                fetchDevices();
+                sendFetchCommand();
                 // Schedule the next execution
                 handler.postDelayed(this, 10000); // 10 seconds delay
             }
@@ -56,39 +59,6 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
         handler.post(updateDevicesRunnable);
     }
 
-    private void fetchDevices() {
-        String url = "https://www.bde.enseeiht.fr/~bailleq/smartHouse/api/v1/devices/35";
-
-        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest(Request.Method.GET, url, null,
-                new Response.Listener<JSONArray>() {
-                    @Override
-                    public void onResponse(JSONArray response) {
-                        try {
-                            for (int i = 0; i < response.length(); i++) {
-                                JSONObject device = response.getJSONObject(i);
-                                String name = device.getString("NAME");
-                                String brandModel = device.getString("BRAND") + " " + device.getString("MODEL");
-                                String data = device.getString("DATA");
-                                boolean state = device.getInt("STATE") == 1;
-                                int autonomy = device.getInt("AUTONOMY");
-                                int deviceId = device.getInt("ID");
-
-                                View deviceView = createDeviceView(name, brandModel, data, autonomy, state, deviceId);
-                                devicesLayout.addView(deviceView);
-                            }
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                // Handle error
-            }
-        });
-
-        requestQueue.add(jsonArrayRequest);
-    }
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -97,12 +67,75 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
             handler.removeCallbacks(updateDevicesRunnable);
         }
     }
-    private View createDeviceView(String name, String brandModel, String data, int autonomy, boolean isOn, int deviceId) {
+
+    private void startBluetoothReceiverThread() {
+        BluetoothSocket socket = BluetoothConnectionManager.getSocket();
+        if (socket != null) {
+            Thread receiverThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        InputStream inputStream = socket.getInputStream();
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                        String received;
+
+                        while ((received = reader.readLine()) != null) {
+                            Log.i("ConnectedDevicesActivity", "Received: " + received);
+                            updateDevicesLayout(parseDevices(received));
+                        }
+                    } catch (IOException e) {
+                        Log.e("ConnectedDevicesActivity", "Error reading from socket", e);
+                    }
+                }
+            });
+            receiverThread.start();
+        }
+    }
+
+    private List<Device> parseDevices(String response) {
+        List<Device> devices = new ArrayList<>();
+        String[] deviceLines = response.split("\n");
+        for (String line : deviceLines) {
+            String[] parts = line.split(":");
+            if (parts.length >= 6) {
+                try {
+                    int deviceId = Integer.parseInt(parts[1].trim());
+                    String name = parts[2].trim();
+                    String brandModel = parts[3].trim();
+                    boolean state = "ON".equalsIgnoreCase(parts[4].trim());
+                    String data = parts[5].trim();
+                    int autonomy = Integer.parseInt(parts[6].trim());
+
+                    devices.add(new Device(deviceId, name, brandModel, state, data, autonomy));
+                } catch (NumberFormatException e) {
+                    Log.e("ConnectedDevicesActivity", "Error parsing device data", e);
+                }
+            }
+        }
+        return devices;
+    }
+
+    private void updateDevicesLayout(List<Device> newDevices) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                devicesLayout.removeAllViews();
+                devices.addAll(newDevices);
+                for (Device device : devices) {
+                    View deviceView = createDeviceView(device);
+                    devicesLayout.addView(deviceView);
+                    Log.i("hap",device.name);
+                }
+            }
+        });
+    }
+
+    private View createDeviceView(Device device) {
         RelativeLayout layout = new RelativeLayout(this);
 
         // Name TextView
         TextView nameTextView = new TextView(this);
-        nameTextView.setText(name);
+        nameTextView.setText(device.name);
         RelativeLayout.LayoutParams paramsName = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
@@ -113,7 +146,7 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
 
         // Data TextView
         TextView dataTextView = new TextView(this);
-        dataTextView.setText(brandModel + " " + data + (autonomy >= 0 ? " Autonomy: " + autonomy + "%" : ""));
+        dataTextView.setText(device.brandModel + " " + device.data + (device.autonomy >= 0 ? " Autonomy: " + device.autonomy + "%" : ""));
         RelativeLayout.LayoutParams paramsData = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
@@ -124,13 +157,12 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
 
         // State Button
         final Button stateButton = new Button(this);
-        stateButton.setText(isOn ? "ON" : "OFF");
+        stateButton.setText(device.state ? "ON" : "OFF");
         stateButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                // Determine the new state based on the button's current text, not the isOn variable
                 boolean newState = stateButton.getText().toString().equals("OFF");
-                toggleDeviceState(deviceId, newState, stateButton);
+                toggleDeviceState(device.deviceId, newState, stateButton);
             }
         });
 
@@ -144,34 +176,42 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
 
         return layout;
     }
-    private void toggleDeviceState(int deviceId, final boolean turnOn, final Button button) {
-        String action = turnOn ? "turnOn" : "turnOff";
-        StringRequest postRequest = new StringRequest(Request.Method.POST, postUrl + houseId,
-                new Response.Listener<String>() {
-                    @Override
-                    public void onResponse(String response) {
-                        // On successful response, update the button text
-                        button.setText(turnOn ? "ON" : "OFF");
-                    }
-                },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        // Handle error
-                    }
-                }
-        ) {
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<String, String>();
-                params.put("deviceId", String.valueOf(deviceId));
-                params.put("houseId", houseId);
-                params.put("action", action);
-                return params;
+
+    private void sendFetchCommand() {
+        BluetoothSocket socket = BluetoothConnectionManager.getSocket();
+        if (socket != null) {
+            try {
+                OutputStream outputStream = socket.getOutputStream();
+                PrintWriter writer = new PrintWriter(outputStream, true);
+                writer.println("fetch");
+            } catch (IOException e) {
+                Log.e("ConnectedDevicesActivity", "Error sending fetch command", e);
             }
-        };
-        requestQueue.add(postRequest);
-        Log.i("ConnectedDevicesActivity", "Request succes");
+        } else {
+            Log.e("ConnectedDevicesActivity", "No Bluetooth socket available");
+        }
+    }
+
+    private void toggleDeviceState(int deviceId, final boolean turnOn, final Button button) {
+        // Your existing toggleDeviceState implementation
+    }
+
+    // Device class to hold device information
+    private static class Device {
+        int deviceId;
+        String name;
+        String brandModel;
+        boolean state;
+        String data;
+        int autonomy;
+
+        public Device(int deviceId, String name, String brandModel, boolean state, String data, int autonomy) {
+            this.deviceId = deviceId;
+            this.name = name;
+            this.brandModel = brandModel;
+            this.state = state;
+            this.data = data;
+            this.autonomy = autonomy;
+        }
     }
 }
-
