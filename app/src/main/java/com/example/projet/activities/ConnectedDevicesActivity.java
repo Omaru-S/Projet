@@ -1,6 +1,8 @@
 package com.example.projet.activities;
 
 import android.bluetooth.BluetoothSocket;
+import android.content.Context;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
@@ -69,104 +71,145 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
 
     private void listenForResponse(BluetoothSocket socket) {
         Thread thread = new Thread(() -> {
+            Log.d("ConnectedDevicesActivity", "Thread started, listening for response.");
             try {
-                Log.d("ConnectedDevicesActivity", "Starting to listen for Bluetooth data.");
                 InputStream inputStream = socket.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
                 StringBuilder response = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if ("END_OF_MESSAGE".equals(line)) {
-                        break;  // Break the loop when end marker is received
+                    Log.d("ConnectedDevicesActivity", "Read line: " + line);
+                    if ("END_OF_MESSAGE".equals(line.trim())) {
+                        Log.d("ConnectedDevicesActivity", "End of message detected.");
+                        break;
+                    } else if ("END_OF_THE_CHUNK".equals(line.trim())) {
+                        Log.d("ConnectedDevicesActivity", "End of chunk detected.");
+                    } else {
+                        response.append(line); // Append line directly
                     }
-                    response.append(line);
                 }
-                Log.d("ConnectedDevicesActivity", "Received string: " + response.toString());
-                JSONArray jsonArray = new JSONArray(response.toString());
-                runOnUiThread(() -> onResponse(jsonArray));
+                Log.d("ConnectedDevicesActivity", "Final response: " + response.toString());
+
+                try {
+                    JSONArray jsonArray = new JSONArray(response.toString()); // Assuming the response string is a valid JSON array
+                    runOnUiThread(() -> onResponse(jsonArray));
+                } catch (JSONException e) {
+                    Log.e("ConnectedDevicesActivity", "Invalid JSON format received, retrying...", e);
+                    requestRetry();
+                }
             } catch (IOException e) {
-                Log.e("ConnectedDevicesActivity", "Error in input stream or reading data", e);
-            } catch (JSONException e) {
-                Log.e("ConnectedDevicesActivity", "Error parsing JSON", e);
+                Log.e("ConnectedDevicesActivity", "Error reading from socket", e);
             }
         });
         thread.start();
     }
 
+    private void requestRetry() {
+        Log.d("ConnectedDevicesActivity", "Retrying data request due to previous failure.");
+        handler.postDelayed(this::requestDeviceData, 100); // Retry after 0.1 second
+    }
 
     private void onResponse(JSONArray response) {
-        Log.d("ConnectedDevicesActivity", "Processing JSON response on UI thread.");
+        Log.d("ConnectedDevicesActivity", "Processing JSON response on UI thread. Number of devices: " + response.length());
+        Log.d("hap",response.toString());
         devicesLayout.removeAllViews(); // Clear existing views
         try {
             for (int i = 0; i < response.length(); i++) {
                 JSONObject device = response.getJSONObject(i);
-                String name = device.getString("NAME");
-                String brandModel = device.getString("BRAND") + " " + device.getString("MODEL");
-                String data = device.getString("DATA");
-                boolean state = device.getInt("STATE") == 1;
-                int autonomy = device.getInt("AUTONOMY");
-                int deviceId = device.getInt("ID");
 
-                Log.d("ConnectedDevicesActivity", "Creating view for device: " + name);
-                View deviceView = createDeviceView(name, brandModel, data, autonomy, state, deviceId);
+                // Use a default value or log a warning if the expected key is not present
+                String name = device.optString("NAME", "Unknown Name"); // Use "Unknown Name" if "NAME" key is missing
+                String brand = device.optString("BRAND", "Unknown Brand");
+                String model = device.optString("MODEL", "");
+                String data = device.optString("DATA", "No data available");
+                int state = device.optInt("STATE", 0); // Default to false (0) if "STATE" key is missing
+                int autonomy = device.optInt("AUTONOMY", -1); // Use -1 to indicate missing data
+                int deviceId = device.optInt("ID", -1); // Use -1 to indicate missing data
+
+                //Log.d("ConnectedDevicesActivity", "Creating view for device: " + name);
+                View deviceView = createDeviceView(name, brand + " " + model, data, autonomy, state, deviceId);
                 devicesLayout.addView(deviceView);
             }
-            Log.d("ConnectedDevicesActivity", "All devices added to layout.");
+            //Log.d("ConnectedDevicesActivity", "All devices added to layout.");
         } catch (JSONException e) {
-            Log.e("ConnectedDevicesActivity", "JSON Parsing error", e);
+            //Log.e("ConnectedDevicesActivity", "JSON Parsing error", e);
         }
     }
 
 
-    private View createDeviceView(String name, String brandModel, String data, int autonomy, boolean isOn, int deviceId) {
-        RelativeLayout layout = new RelativeLayout(this);
+
+
+    private View createDeviceView(String name, String brandModel, String data, int autonomy, int isOn, int deviceId) {
+        Context context = this; // Context for view creation
+        RelativeLayout layout = new RelativeLayout(context);
+        layout.setPadding(16, 16, 16, 16); // Padding for the layout
 
         // Name TextView
-        TextView nameTextView = new TextView(this);
+        TextView nameTextView = new TextView(context);
+        nameTextView.setId(View.generateViewId()); // Unique ID for layout referencing
         nameTextView.setText(name);
+        nameTextView.setTextSize(18); // Text size
+        nameTextView.setTypeface(null, Typeface.BOLD); // Bold text for the name
         RelativeLayout.LayoutParams paramsName = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
         );
-        paramsName.addRule(RelativeLayout.ALIGN_PARENT_LEFT, RelativeLayout.TRUE);
-        paramsName.addRule(RelativeLayout.CENTER_VERTICAL, RelativeLayout.TRUE);
+        paramsName.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+        paramsName.addRule(RelativeLayout.ALIGN_PARENT_START);
         layout.addView(nameTextView, paramsName);
 
-        // Data TextView
-        TextView dataTextView = new TextView(this);
-        dataTextView.setText(brandModel + " " + data + (autonomy >= 0 ? " Autonomy: " + autonomy + "%" : ""));
+        // BrandModel and Autonomy/Data TextView
+        TextView brandModelTextView = new TextView(context);
+        brandModelTextView.setId(View.generateViewId());
+        String autonomyText = autonomy == -1 ? "No Battery" : "Autonomy: " + autonomy + "%";
+        brandModelTextView.setText(brandModel );
+        brandModelTextView.setTextSize(16);
+        RelativeLayout.LayoutParams paramsBrandModel = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
+        );
+        paramsBrandModel.addRule(RelativeLayout.BELOW, nameTextView.getId());
+        paramsBrandModel.addRule(RelativeLayout.ALIGN_START, nameTextView.getId());
+        layout.addView(brandModelTextView, paramsBrandModel);
+
+        // Data TextView just below BrandModel
+        TextView dataTextView = new TextView(context);
+        dataTextView.setTextSize(16); // Same text size as brand/model for consistency
+        dataTextView.setText(autonomyText + " - " + data);
         RelativeLayout.LayoutParams paramsData = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
         );
-        paramsData.addRule(RelativeLayout.CENTER_HORIZONTAL, RelativeLayout.TRUE);
-        paramsData.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
+        paramsData.addRule(RelativeLayout.BELOW, brandModelTextView.getId());
+        paramsData.addRule(RelativeLayout.ALIGN_START, brandModelTextView.getId());
         layout.addView(dataTextView, paramsData);
 
         // State Button
-        final Button stateButton = new Button(this);
-        stateButton.setText(isOn ? "ON" : "OFF");
+        Button stateButton = new Button(context);
+        stateButton.setId(View.generateViewId());
+        stateButton.setText(isOn == 1 ? "ON" : "OFF"); // Set text based on isOn value
         stateButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                toggleDeviceState(deviceId, !isOn, stateButton);
+                toggleDeviceState(deviceId, isOn == 1 ? 0 : 1, stateButton); // Toggle state
             }
         });
-
         RelativeLayout.LayoutParams paramsButton = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
         );
-        paramsButton.addRule(RelativeLayout.ALIGN_PARENT_RIGHT, RelativeLayout.TRUE);
-        paramsButton.addRule(RelativeLayout.CENTER_VERTICAL, RelativeLayout.TRUE);
+        paramsButton.addRule(RelativeLayout.ALIGN_PARENT_END);
+        paramsButton.addRule(RelativeLayout.CENTER_VERTICAL);
         layout.addView(stateButton, paramsButton);
 
         return layout;
     }
 
-    private void toggleDeviceState(int deviceId, boolean turnOn, Button button) {
+
+
+    private void toggleDeviceState(int deviceId, int turnOn, Button button) {
         // This method would need to be updated to use Bluetooth communication or a local method, as necessary.
-        button.setText(turnOn ? "ON" : "OFF"); // Simulate immediate response for UI
+        button.setText(turnOn == 1 ? "ON" : "OFF"); // Simulate immediate response for UI
     }
 
     @Override

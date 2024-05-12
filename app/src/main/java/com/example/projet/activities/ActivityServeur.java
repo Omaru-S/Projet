@@ -84,30 +84,32 @@ public class ActivityServeur extends AppCompatActivity {
     }
 
     private void manageConnectedSocket(BluetoothSocket socket) {
-        Log.i("ST", "Start Thread");
         Thread thread = new Thread(() -> {
             try {
                 InputStream inputStream = socket.getInputStream();
                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
                 OutputStream outputStream = socket.getOutputStream();
 
-                Log.d("ActivityServeur", "Waiting for client request...");
-                String request = reader.readLine();
-                if (request != null) {
-                    Log.d("ActivityServeur", "Received request: " + request);
-                    // Handle different requests
-                    if ("GET_DEVICES".equals(request)) {
+                String request;
+                // Continue reading requests line-by-line until the stream is closed or an error occurs
+                while ((request = reader.readLine()) != null) {
+                    if ("GET_DEVICES".equals(request.trim())) {
                         getDevices(new ResponseCallback() {
                             @Override
                             public void onResponse(JSONArray response) {
                                 try {
                                     String jsonResponse = response.toString();
-                                    outputStream.write((jsonResponse + "\n").getBytes());
+                                    Log.d("hap", jsonResponse);
+                                    int chunkSize = 2048; // Define a suitable chunk size
+                                    int start = 0;
+                                    while (start < jsonResponse.length()) {
+                                        int end = Math.min(jsonResponse.length(), start + chunkSize);
+                                        String chunk = jsonResponse.substring(start, end);
+                                        outputStream.write((chunk + "\nEND_OF_THE_CHUNK\n").getBytes("UTF-8"));
+                                        start += chunkSize;
+                                    }
                                     outputStream.write("END_OF_MESSAGE\n".getBytes());
                                     outputStream.flush();
-
-                                    outputStream.flush();
-                                    Log.d("ActivityServeur", "Sent JSONArray to client.");
                                 } catch (IOException e) {
                                     Log.e("ActivityServeur", "Failed to send JSONArray", e);
                                 }
@@ -115,7 +117,6 @@ public class ActivityServeur extends AppCompatActivity {
 
                             @Override
                             public void onError(VolleyError error) {
-                                Log.e("ActivityServeur", "Failed to fetch JSONArray", error);
                                 try {
                                     outputStream.write("Error fetching devices".getBytes());
                                     outputStream.flush();
@@ -125,8 +126,6 @@ public class ActivityServeur extends AppCompatActivity {
                             }
                         });
                     }
-                } else {
-                    Log.d("ActivityServeur", "No request received. Client may have disconnected.");
                 }
             } catch (IOException e) {
                 Log.e("ActivityServeur", "Error managing socket", e);
@@ -134,6 +133,8 @@ public class ActivityServeur extends AppCompatActivity {
         });
         thread.start();
     }
+
+
 
 
 
@@ -150,12 +151,13 @@ public class ActivityServeur extends AppCompatActivity {
                             JSONObject device = response.getJSONObject(i);
                             JSONObject newDevice = new JSONObject();
                             // Extract and put only necessary fields
-                            newDevice.put("name", device.getString("NAME"));
-                            newDevice.put("brandModel", device.getString("BRAND") + " " + device.getString("MODEL"));
-                            newDevice.put("data", device.getString("DATA"));
-                            newDevice.put("state", device.getInt("STATE") == 1);
-                            newDevice.put("autonomy", device.getInt("AUTONOMY"));
-                            newDevice.put("id", device.getInt("ID"));
+                            newDevice.put("NAME", device.getString("NAME"));
+                            newDevice.put("BRAND", device.getString("BRAND"));
+                            newDevice.put("MODEL",device.getString("MODEL"));
+                            newDevice.put("DATA", device.getString("DATA"));
+                            newDevice.put("STATE", device.getInt("STATE"));
+                            newDevice.put("AUTONOMY", device.getInt("AUTONOMY"));
+                            newDevice.put("ID", device.getInt("ID"));
 
                             newJsonArray.put(newDevice);
                         }
