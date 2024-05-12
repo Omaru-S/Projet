@@ -12,6 +12,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.projet.R;
+import com.example.projet.bluetooth.SocketManager;
 import com.example.projet.utils.Constants;
 
 import java.io.IOException;
@@ -38,28 +39,21 @@ public class ActivityClient extends AppCompatActivity {
         Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
         if (pairedDevices.size() > 0) {
             for (BluetoothDevice device : pairedDevices) {
-                if(device.getName().equals("Redmi_serv")) {
+                if (device.getName().equals("Redmi_serv")) {
                     try {
-                        mmSocket = device.createRfcommSocketToServiceRecord(Constants.SERVEUR_UUID);
-                        bluetoothAdapter.cancelDiscovery(); // Always cancel discovery because it will slow down a connection
-                        mmSocket.connect(); // Attempt to connect to the remote device
-                        Log.i("BluetoothClient", "Successfully connected to the server!");
-                        // You can now manage the connection (in a separate thread)
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                connectionStatusTextView.setText("Connecté au serveur!");
-                            }
-                        });
-                        manageConnectedSocket(mmSocket);
-                        Intent intent = new Intent(ActivityClient.this, ConnectedDevicesActivity.class);
-                        startActivity(intent);
-
-                        break; // Exit the loop once connected
+                        BluetoothSocket mmSocket = device.createRfcommSocketToServiceRecord(Constants.SERVEUR_UUID);
+                        bluetoothAdapter.cancelDiscovery();
+                        mmSocket.connect();
+                        SocketManager.getInstance().setBluetoothSocket(mmSocket);
+                        runOnUiThread(() -> connectionStatusTextView.setText("Connecté au serveur!"));
+                        startActivity(new Intent(ActivityClient.this, ConnectedDevicesActivity.class));
+                        break;
                     } catch (IOException connectException) {
                         Log.e("BluetoothClient", "Could not connect to the server", connectException);
                         try {
-                            mmSocket.close();
+                            if (mmSocket != null) {
+                                mmSocket.close();
+                            }
                         } catch (IOException closeException) {
                             Log.e("BluetoothClient", "Could not close the client socket", closeException);
                         }
@@ -69,8 +63,9 @@ public class ActivityClient extends AppCompatActivity {
         }
     }
 
-    private void manageConnectedSocket(BluetoothSocket socket) {
-        // Handle the connection in a separate thread
-        // Example: start a thread to manage the connection
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        SocketManager.getInstance().closeSocket();
     }
 }

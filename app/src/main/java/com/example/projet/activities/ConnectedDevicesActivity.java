@@ -1,5 +1,6 @@
 package com.example.projet.activities;
 
+import android.bluetooth.BluetoothSocket;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
@@ -10,93 +11,113 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.JsonArrayRequest;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
 import com.example.projet.R;
-import com.android.volley.Request;
+import com.example.projet.bluetooth.SocketManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 
 public class ConnectedDevicesActivity extends AppCompatActivity {
 
     private LinearLayout devicesLayout;
-    private RequestQueue requestQueue;
     private Handler handler = new Handler();
     private Runnable updateDevicesRunnable;
-    private final String houseId = "35";
-    // The URL endpoint for POST requests - replace with actual URL endpoint
-    private final String postUrl = "https://www.bde.enseeiht.fr/~bailleq/smartHouse/api/v1/devices/35";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_connected_devices);
         devicesLayout = findViewById(R.id.devicesLayout);
-        requestQueue = Volley.newRequestQueue(this);
-        // Define the Runnable task for fetching and updating devices
+
+        requestDeviceData(); // Request data when activity starts
+
         updateDevicesRunnable = new Runnable() {
             @Override
             public void run() {
-                Log.d("ConnectedDevicesActivity", "Fetching and updating device information");
-                fetchDevices();
-                // Schedule the next execution
-                handler.postDelayed(this, 10000); // 10 seconds delay
+                requestDeviceData(); // Periodically request updated data
+                handler.postDelayed(this, 10000); // Update every 10 seconds
             }
         };
-
-        // Start the periodic updates
         handler.post(updateDevicesRunnable);
     }
 
-    private void fetchDevices() {
-        String url = "https://www.bde.enseeiht.fr/~bailleq/smartHouse/api/v1/devices/35";
-
-        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest(Request.Method.GET, url, null,
-                new Response.Listener<JSONArray>() {
-                    @Override
-                    public void onResponse(JSONArray response) {
-                        try {
-                            for (int i = 0; i < response.length(); i++) {
-                                JSONObject device = response.getJSONObject(i);
-                                String name = device.getString("NAME");
-                                String brandModel = device.getString("BRAND") + " " + device.getString("MODEL");
-                                String data = device.getString("DATA");
-                                boolean state = device.getInt("STATE") == 1;
-                                int autonomy = device.getInt("AUTONOMY");
-                                int deviceId = device.getInt("ID");
-
-                                View deviceView = createDeviceView(name, brandModel, data, autonomy, state, deviceId);
-                                devicesLayout.addView(deviceView);
-                            }
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                // Handle error
+    private void requestDeviceData() {
+        BluetoothSocket socket = SocketManager.getInstance().getBluetoothSocket();
+        if (socket != null) {
+            if(socket.isConnected()){
+                try {
+                    OutputStream outputStream = socket.getOutputStream();
+                    outputStream.write("GET_DEVICES\n".getBytes());
+                    outputStream.flush();
+                    Log.d("ConnectedDevicesActivity", "Request sent to server.");
+                    listenForResponse(socket);
+                } catch (IOException e) {
+                    Log.e("ConnectedDevicesActivity", "Failed to send request", e);
+                }
+            } else {
+                Log.e("ActivityServeur", "Socket is not connected.");
             }
-        });
-
-        requestQueue.add(jsonArrayRequest);
-    }
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        // Stop the periodic updates to avoid memory leaks
-        if (handler != null && updateDevicesRunnable != null) {
-            handler.removeCallbacks(updateDevicesRunnable);
         }
     }
+
+    private void listenForResponse(BluetoothSocket socket) {
+        Thread thread = new Thread(() -> {
+            try {
+                Log.d("ConnectedDevicesActivity", "Starting to listen for Bluetooth data.");
+                InputStream inputStream = socket.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if ("END_OF_MESSAGE".equals(line)) {
+                        break;  // Break the loop when end marker is received
+                    }
+                    response.append(line);
+                }
+                Log.d("ConnectedDevicesActivity", "Received string: " + response.toString());
+                JSONArray jsonArray = new JSONArray(response.toString());
+                runOnUiThread(() -> onResponse(jsonArray));
+            } catch (IOException e) {
+                Log.e("ConnectedDevicesActivity", "Error in input stream or reading data", e);
+            } catch (JSONException e) {
+                Log.e("ConnectedDevicesActivity", "Error parsing JSON", e);
+            }
+        });
+        thread.start();
+    }
+
+
+    private void onResponse(JSONArray response) {
+        Log.d("ConnectedDevicesActivity", "Processing JSON response on UI thread.");
+        devicesLayout.removeAllViews(); // Clear existing views
+        try {
+            for (int i = 0; i < response.length(); i++) {
+                JSONObject device = response.getJSONObject(i);
+                String name = device.getString("NAME");
+                String brandModel = device.getString("BRAND") + " " + device.getString("MODEL");
+                String data = device.getString("DATA");
+                boolean state = device.getInt("STATE") == 1;
+                int autonomy = device.getInt("AUTONOMY");
+                int deviceId = device.getInt("ID");
+
+                Log.d("ConnectedDevicesActivity", "Creating view for device: " + name);
+                View deviceView = createDeviceView(name, brandModel, data, autonomy, state, deviceId);
+                devicesLayout.addView(deviceView);
+            }
+            Log.d("ConnectedDevicesActivity", "All devices added to layout.");
+        } catch (JSONException e) {
+            Log.e("ConnectedDevicesActivity", "JSON Parsing error", e);
+        }
+    }
+
+
     private View createDeviceView(String name, String brandModel, String data, int autonomy, boolean isOn, int deviceId) {
         RelativeLayout layout = new RelativeLayout(this);
 
@@ -128,9 +149,7 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
         stateButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                // Determine the new state based on the button's current text, not the isOn variable
-                boolean newState = stateButton.getText().toString().equals("OFF");
-                toggleDeviceState(deviceId, newState, stateButton);
+                toggleDeviceState(deviceId, !isOn, stateButton);
             }
         });
 
@@ -144,34 +163,17 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
 
         return layout;
     }
-    private void toggleDeviceState(int deviceId, final boolean turnOn, final Button button) {
-        String action = turnOn ? "turnOn" : "turnOff";
-        StringRequest postRequest = new StringRequest(Request.Method.POST, postUrl + houseId,
-                new Response.Listener<String>() {
-                    @Override
-                    public void onResponse(String response) {
-                        // On successful response, update the button text
-                        button.setText(turnOn ? "ON" : "OFF");
-                    }
-                },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        // Handle error
-                    }
-                }
-        ) {
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<String, String>();
-                params.put("deviceId", String.valueOf(deviceId));
-                params.put("houseId", houseId);
-                params.put("action", action);
-                return params;
-            }
-        };
-        requestQueue.add(postRequest);
-        Log.i("ConnectedDevicesActivity", "Request succes");
+
+    private void toggleDeviceState(int deviceId, boolean turnOn, Button button) {
+        // This method would need to be updated to use Bluetooth communication or a local method, as necessary.
+        button.setText(turnOn ? "ON" : "OFF"); // Simulate immediate response for UI
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (handler != null && updateDevicesRunnable != null) {
+            handler.removeCallbacks(updateDevicesRunnable);
+        }
     }
 }
-

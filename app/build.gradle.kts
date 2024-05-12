@@ -14,6 +14,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -30,6 +31,8 @@ android {
 
 dependencies {
     implementation("com.android.volley:volley:1.2.1")
+    implementation("androidx.core:core:1.13.1")
+    implementation("androidx.multidex:multidex:2.0.1")
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
