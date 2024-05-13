@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.Random;
 
 public class ConnectedDevicesActivity extends AppCompatActivity {
 
@@ -78,7 +79,6 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
                 StringBuilder response = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    Log.d("ConnectedDevicesActivity", "Read line: " + line);
                     if ("END_OF_MESSAGE".equals(line.trim())) {
                         Log.d("ConnectedDevicesActivity", "End of message detected.");
                         break;
@@ -88,8 +88,6 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
                         response.append(line); // Append line directly
                     }
                 }
-                Log.d("ConnectedDevicesActivity", "Final response: " + response.toString());
-
                 try {
                     JSONArray jsonArray = new JSONArray(response.toString()); // Assuming the response string is a valid JSON array
                     runOnUiThread(() -> onResponse(jsonArray));
@@ -106,7 +104,7 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
 
     private void requestRetry() {
         Log.d("ConnectedDevicesActivity", "Retrying data request due to previous failure.");
-        handler.postDelayed(this::requestDeviceData, 100); // Retry after 0.1 second
+        handler.postDelayed(this::requestDeviceData, 200); // Retry after 0.1 second
     }
 
     private void onResponse(JSONArray response) {
@@ -132,7 +130,8 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
             }
             //Log.d("ConnectedDevicesActivity", "All devices added to layout.");
         } catch (JSONException e) {
-            //Log.e("ConnectedDevicesActivity", "JSON Parsing error", e);
+            Log.e("ConnectedDevicesActivity", "JSON Parsing error", e);
+            requestRetry();
         }
     }
 

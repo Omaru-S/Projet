@@ -100,7 +100,7 @@ public class ActivityServeur extends AppCompatActivity {
                                 try {
                                     String jsonResponse = response.toString();
                                     Log.d("hap", jsonResponse);
-                                    int chunkSize = 2048; // Define a suitable chunk size
+                                    int chunkSize = 512; // Define a suitable chunk size
                                     int start = 0;
                                     while (start < jsonResponse.length()) {
                                         int end = Math.min(jsonResponse.length(), start + chunkSize);
