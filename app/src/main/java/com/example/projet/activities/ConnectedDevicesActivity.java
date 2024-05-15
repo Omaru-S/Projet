@@ -207,9 +207,21 @@ public class ConnectedDevicesActivity extends AppCompatActivity {
 
 
     private void toggleDeviceState(int deviceId, int turnOn, Button button) {
-        // This method would need to be updated to use Bluetooth communication or a local method, as necessary.
-        button.setText(turnOn == 1 ? "ON" : "OFF"); // Simulate immediate response for UI
+        String command = deviceId + "CHANGE_STATE\n";
+        BluetoothSocket socket = SocketManager.getInstance().getBluetoothSocket();
+        if (socket != null && socket.isConnected()) {
+            try {
+                OutputStream outputStream = socket.getOutputStream();
+                outputStream.write(command.getBytes());
+                outputStream.flush();
+            } catch (IOException e) {
+                Log.e("ConnectedDevicesActivity", "Failed to send state change request", e);
+            }
+        }
+        // Simulate immediate response for UI
+        button.setText(turnOn == 1 ? "ON" : "OFF");
     }
+
 
     @Override
     protected void onDestroy() {

@@ -10,11 +10,13 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.android.volley.AuthFailureError;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonArrayRequest;
+import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.projet.R;
 import com.example.projet.bluetooth.ResponseCallback;
@@ -29,6 +31,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 public class ActivityServeur extends AppCompatActivity {
     private BluetoothServerSocket serverSocket;
@@ -93,19 +97,24 @@ public class ActivityServeur extends AppCompatActivity {
                 String request;
                 // Continue reading requests line-by-line until the stream is closed or an error occurs
                 while ((request = reader.readLine()) != null) {
+
+                    if (request.endsWith("CHANGE_STATE")) {
+                        int deviceId = Integer.parseInt(request.replace("CHANGE_STATE", "").trim());
+                        Log.d("ActivityServeur","Change state of" + String.valueOf(deviceId));
+                        changeDeviceState(deviceId, outputStream);
+                    }
                     if ("GET_DEVICES".equals(request.trim())) {
                         getDevices(new ResponseCallback() {
                             @Override
                             public void onResponse(JSONArray response) {
                                 try {
                                     String jsonResponse = response.toString();
-                                    Log.d("hap", jsonResponse);
                                     int chunkSize = 512; // Define a suitable chunk size
                                     int start = 0;
                                     while (start < jsonResponse.length()) {
                                         int end = Math.min(jsonResponse.length(), start + chunkSize);
                                         String chunk = jsonResponse.substring(start, end);
-                                        outputStream.write((chunk + "\nEND_OF_THE_CHUNK\n").getBytes("UTF-8"));
+                                        outputStream.write((chunk + "\nEND_OF_THE_CHUNK\n").getBytes());
                                         start += chunkSize;
                                     }
                                     outputStream.write("END_OF_MESSAGE\n".getBytes());
@@ -135,15 +144,11 @@ public class ActivityServeur extends AppCompatActivity {
     }
 
 
-
-
-
     // This is a placeholder method to simulate fetching devices data
     private void getDevices(ResponseCallback callback) {
         Log.d("DeviceFetch", "Starting to fetch devices.");
-        String url = "https://www.bde.enseeiht.fr/~bailleq/smartHouse/api/v1/devices/35";
 
-        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest(Request.Method.GET, url, null,
+        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest(Request.Method.GET, Constants.completeURL, null,
                 response -> {
                     JSONArray newJsonArray = new JSONArray(); // Move inside the response handler
                     try {
@@ -179,6 +184,49 @@ public class ActivityServeur extends AppCompatActivity {
                 });
 
         requestQueue.add(jsonArrayRequest);
+    }
+    private void changeDeviceState(int deviceId, OutputStream outputStream) {
+        Log.d("ActivityServeur", "Preparing to send POST request for device state change");
+        StringRequest stringRequest = new StringRequest(Request.Method.POST, Constants.url,
+                response -> {
+                    try {
+                        Log.d("ActivityServeur", "POST request successful, response: " + response);
+                        outputStream.write(("POST_SUCCESS\n" + response + "\n").getBytes());
+                        outputStream.flush();
+                    } catch (IOException e) {
+                        Log.e("ActivityServeur", "Failed to send POST_SUCCESS and response back to client", e);
+                    }
+                },
+                error -> {
+                    Log.e("ActivityServeur", "Error in POST request: " + error.toString());
+                    try {
+                        outputStream.write("POST_FAILED\n".getBytes());
+                        outputStream.flush();
+                    } catch (IOException e) {
+                        Log.e("ActivityServeur", "Failed to send POST_FAILED message to client", e);
+                    }
+                }
+        ) {
+            @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("deviceId", String.valueOf(deviceId));
+                params.put("houseId",Constants.houseId);
+                params.put("action", "turnOnOff");
+                Log.d("ActivityServeur", "POST params: deviceId=" + deviceId + ", action=turnOnOff");
+                return params;
+            }
+
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Content-Type", "application/x-www-form-urlencoded");
+                Log.d("ActivityServeur", "Headers set for POST request");
+                return headers;
+            }
+        };
+        requestQueue.add(stringRequest);
+        Log.d("ActivityServeur", "POST request added to the queue");
     }
 
 }
