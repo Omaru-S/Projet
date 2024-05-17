@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">Projet</string>
+    <string name="title_la_maison_bluetooth">La Maison Bluetooth</string>
+    <string name="description_server_client">Voulez-vous activer le serveur (hub) ou le client (télécommande utilisateur)?</string>
+    <string name="status_server_waiting">SERVEUR EN ATTENTE</string>
+    <string name="status_client_waiting">CLIENT EN ATTENTE</string>
+    <string name="connection_waiting">*Attente de connection au serveur*</string>
+    <string name="connected_devices">Connected Devices</string>
+    <string name="start_server">LANCER LE SERVEUR</string>
+    <string name="start_client">LANCER LE CLIENT</string>
 </resources>

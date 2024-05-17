@@ -8,7 +8,7 @@
         android:id="@+id/titleTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="La Maison Bluetooth"
+        android:text="@string/title_la_maison_bluetooth"
         android:textSize="24sp"
         android:textStyle="bold"
         android:layout_centerHorizontal="true"/>
@@ -17,7 +17,7 @@
         android:id="@+id/descriptionTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Voulez-vous activer le serveur (hub) ou le client (télécommande utilisateur)?"
+        android:text="@string/description_server_client"
         android:layout_below="@id/titleTextView"
         android:layout_marginTop="20dp"
         android:layout_centerHorizontal="true"/>
@@ -26,7 +26,7 @@
         android:id="@+id/statusButton"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="CLIENT EN ATTENTE"
+        android:text="@string/status_client_waiting"
         android:layout_below="@id/descriptionTextView"
         android:layout_marginTop="20dp"
         android:enabled="false" />
@@ -35,7 +35,7 @@
         android:id="@+id/connectionStatusTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="*Attente de connection au serveur*"
+        android:text="@string/connection_waiting"
         android:layout_below="@id/statusButton"
         android:layout_marginTop="20dp"
         android:layout_centerHorizontal="true"/>

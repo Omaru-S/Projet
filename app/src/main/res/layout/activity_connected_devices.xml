@@ -8,7 +8,7 @@
         android:id="@+id/connectedDevicesTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Connected Devices"
+        android:text="@string/connected_devices"
         android:gravity="center"
         android:textSize="24sp"
         android:textStyle="bold"
@@ -28,7 +28,7 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- Device views will be added here programmatically -->
+            <!-- On ajoutera les deviceView ici dans l'activité ConnectedDevicesActivity -->
 
         </LinearLayout>
     </ScrollView>
